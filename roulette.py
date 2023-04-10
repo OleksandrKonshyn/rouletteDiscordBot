@@ -1,8 +1,8 @@
-import json
 import random
 from typing import Tuple
 
 from exceptions import WrongNumberError, MinimalBetError, InsufficientBalanceError, WrongColorError
+from players_data_manager import PlayersDataManager, PlayersDataManagerFileBased
 
 
 class RouletteGame:
@@ -11,6 +11,7 @@ class RouletteGame:
 
     Attributes:
         __current_player_id (str): The ID of the player currently playing the game.
+        __players_data_manager (PlayersDataManager, optional): The data manager used to load and save players data.
         __players_data (dict): A dictionary containing data about the players.
 
     Constants:
@@ -22,8 +23,8 @@ class RouletteGame:
         GREEN_NUMBERS (Tuple[int, ...]): A tuple containing the numbers that are green on the roulette wheel.
 
     Methods:
-        __load_players_data(): Loads the players data from the JSON file.
-        __save_players_data(): Saves the players data to the JSON file.
+        __load_players_data(): Loads the players data from the storage.
+        __save_players_data(): Saves the players data to the storage.
         get_color(num: int) -> str: Returns the color (red, black, or green) for the given number on the roulette
                                     wheel.
         spin_the_wheel() -> int: Spins the roulette wheel and returns the resulting number.
@@ -50,32 +51,35 @@ class RouletteGame:
     # fmt: on
     GREEN_NUMBERS: Tuple[int, ...] = (0,)
 
-    def __init__(self, player_id: int):
+    def __init__(self, player_id: int, players_data_manager: PlayersDataManager = PlayersDataManagerFileBased):
         """
-        Initializes a new RouletteGame instance.
+        Initializes a new instance of the RouletteGame class.
 
         Args:
             player_id (int): The ID of the player playing the game.
+            players_data_manager (PlayersDataManager, optional): The data manager used to load and save players data.
+                Defaults to PlayersDataManagerFileBased.
         """
         self.__current_player_id = str(player_id)
+        self.__players_data_manager = players_data_manager()
         self.__players_data = self.__load_players_data()
 
-    def __load_players_data(self) -> dict:
-        """Loads the player data from a JSON file and returns it as a dictionary.
+    def __load_players_data(self) -> dict[str:int]:
+        """
+        Loads players data using data manager and returns them as a dictionary.
 
         Returns:
-            dict: A dictionary containing the player data.
+            dict[str, int]: A dictionary containing players data.
         """
-        try:
-            with open("users_data.json", "r") as file:
-                return json.load(file)
-        except (json.decoder.JSONDecodeError, FileNotFoundError):
-            return {self.__current_player_id: self.STARTING_BALANCE}
+        if players_data := self.__players_data_manager.load_players_data():
+            return players_data
+        return {self.__current_player_id: self.STARTING_BALANCE}
 
     def __save_players_data(self):
-        """Saves the player data dictionary as a JSON file."""
-        with open("users_data.json", "w") as file:
-            json.dump(self.__players_data, file)
+        """
+        Saves players data using data manager.
+        """
+        self.__players_data_manager.save_players_data(players=self.__players_data)
 
     def get_color(self, num: int) -> str:
         """
