@@ -17,6 +17,8 @@ class RouletteGame:
     Constants:
         MINIMAL_BET (int): The minimum amount that can be bet.
         STARTING_BALANCE (int): The starting balance for a new player.
+        NUMBER_PRIZE_MULTIPLIER (int): The factor by which a player score increases when they match numbers in the game.
+        COLOR_PRIZE_MULTIPLIER (int): The factor by which a player score increases when they match colors in the game.
         COLORS (Tuple[str, str]): A tuple containing the two possible colors for a bet.
         RED_NUMBERS (Tuple[int, ...]): A tuple containing the numbers that are red on the roulette wheel.
         BLACK_NUMBERS (Tuple[int, ...]): A tuple containing the numbers that are black on the roulette wheel.
@@ -42,6 +44,9 @@ class RouletteGame:
 
     MINIMAL_BET: int = 1
     STARTING_BALANCE: int = 100
+
+    NUMBER_PRIZE_MULTIPLIER: int = 36
+    COLOR_PRIZE_MULTIPLIER: int = 2
 
     COLORS: Tuple[str, str] = ("red", "black")
 
@@ -109,7 +114,6 @@ class RouletteGame:
         Returns:
             int: The number on which the roulette ball lands.
         """
-
         return random.randint(0, 36)
 
     def has_sufficient_funds(self, amount: int) -> bool:
@@ -197,7 +201,7 @@ class RouletteGame:
         Returns:
             int: The prize amount for the bet.
         """
-        return amount * 36 if num == result else 0
+        return amount * self.NUMBER_PRIZE_MULTIPLIER if num == result else 0
 
     def calculate_color_prize(self, color: str, result: int, amount: int) -> int:
         """
@@ -211,4 +215,4 @@ class RouletteGame:
         Returns:
             int: The prize amount for the bet.
         """
-        return amount * 2 if color.lower() == self.get_color(result) else 0
+        return amount * self.COLOR_PRIZE_MULTIPLIER if color.lower() == self.get_color(result) else 0
