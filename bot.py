@@ -130,6 +130,29 @@ async def bet_color_command(ctx, bet_color: str = None, bet_amount: int = None):
         await ctx.send(e)
 
 
+@bet_number_command.error
+@bet_color_command.error
+async def bet_color_or_number_command_error(ctx, error):
+    """
+    An error handler for the `bet_number_command` and `bet_color_command` commands.
+    If the error that was raised is a `BadArgument` error, this function sends a message to the user
+    indicating that the argument they provided is invalid.
+
+    Parameters:
+    -----------
+    ctx: commands.Context
+        The context of the command invocation.
+    error: Exception
+        The error that was raised.
+    """
+    if isinstance(error, commands.BadArgument):
+        message = (
+            f"'{ctx.current_argument}' is not valid value for '{ctx.current_parameter.name}' parameter, "
+            f"use value of {ctx.current_parameter.annotation} type"
+        )
+        await ctx.send(message)
+
+
 bot.remove_command('help')
 
 
@@ -149,19 +172,21 @@ async def help_command(ctx, command: str = None):
     - None
     """
 
-    if not command:
-        embed = discord.Embed(title="Commands", description="List of available commands:")
-        embed.add_field(name="$balance", value="Check your balance in the game.", inline=False)
-        embed.add_field(name="$number [number] [amount]", value="Bet on a number in roulette.", inline=False)
-        embed.add_field(name="$color [red/black] [amount]", value="Bet on a color in roulette.", inline=False)
+    embed = discord.Embed(title="Commands", description="List of available commands:")
+    embed.add_field(name="$balance", value="Check your balance in the game.", inline=False)
+    embed.add_field(name="$number [number] [amount]", value="Bet on a number in roulette.", inline=False)
+    embed.add_field(name="$color [red/black] [amount]", value="Bet on a color in roulette.", inline=False)
+    embed.add_field(name="$help [balance/number/color]", value="Help for commands.", inline=False)
 
+    if not command:
         await ctx.send(embed=embed)
         return
 
     command_obj = bot.get_command(command)
 
     if not command_obj or command_obj.hidden:
-        await ctx.send(f"Command '{command}' not found.")
+        await ctx.send(f"Command $help '{command}' not found.")
+        await ctx.send(embed=embed)
         return
 
     usage_text = f"{ctx.prefix}{command_obj.qualified_name} {command_obj.signature.replace('=None', '')}\n"
