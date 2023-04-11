@@ -320,6 +320,7 @@ class RouletteGame:
             return self.calculate_number_prize(bet.number, winning_number, bet.amount)
         return self.calculate_color_prize(bet.color, winning_number, bet.amount)
 
+    # TODO: Refactor to split updating balance and sending results
     def calculate_results(self, winning_number: int) -> list:
         """Calculates and returns the results of the game.
 
