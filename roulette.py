@@ -1,45 +1,70 @@
 import random
 from typing import Tuple
 
-from exceptions import WrongNumberError, MinimalBetError, InsufficientBalanceError, WrongColorError
+from exceptions import WrongNumberError, WrongColorError, MinimalBetError, InsufficientBalanceError
+from models import PlayerBetResult, PlayersStats, Bet
 from players_data_manager import PlayersDataManager, PlayersDataManagerFileBased
 
 
 class RouletteGame:
     """
-    A class representing a game of roulette.
+    A class representing a roulette game.
 
     Attributes:
-        __current_player_id (str): The ID of the player currently playing the game.
-        __players_data_manager (PlayersDataManager, optional): The data manager used to load and save players data.
-        __players_data (dict): A dictionary containing data about the players.
-
-    Constants:
-        MINIMAL_BET (int): The minimum amount that can be bet.
-        STARTING_BALANCE (int): The starting balance for a new player.
-        NUMBER_PRIZE_MULTIPLIER (int): The factor by which a player score increases when they match numbers in the game.
-        COLOR_PRIZE_MULTIPLIER (int): The factor by which a player score increases when they match colors in the game.
-        COLORS (Tuple[str, str]): A tuple containing the two possible colors for a bet.
-        RED_NUMBERS (Tuple[int, ...]): A tuple containing the numbers that are red on the roulette wheel.
-        BLACK_NUMBERS (Tuple[int, ...]): A tuple containing the numbers that are black on the roulette wheel.
-        GREEN_NUMBERS (Tuple[int, ...]): A tuple containing the numbers that are green on the roulette wheel.
+        MINIMAL_BET (int): The minimal bet amount.
+        STARTING_BALANCE (int): The starting balance amount for a new player.
+        NUMBER_PRIZE_MULTIPLIER (int): The multiplier for winning number bets.
+        COLOR_PRIZE_MULTIPLIER (int): The multiplier for winning color bets.
+        COLORS (Tuple[str, str]): The available colors for betting.
+        RED_NUMBERS (Tuple[int, ...]): The red numbers on the roulette table.
+        BLACK_NUMBERS (Tuple[int, ...]): The black numbers on the roulette table.
+        GREEN_NUMBERS (Tuple[int, ...]): The green numbers on the roulette table.
 
     Methods:
-        __load_players_data(): Loads the players data from the storage.
-        __save_players_data(): Saves the players data to the storage.
-        get_color(num: int) -> str: Returns the color (red, black, or green) for the given number on the roulette
-                                    wheel.
-        spin_the_wheel() -> int: Spins the roulette wheel and returns the resulting number.
-        has_sufficient_funds(amount: int) -> bool: Returns True if the player has enough coins to make the bet,
-                                                   False otherwise.
-        bet_number(num: int, amount: int) -> None: Places a bet on a number on the roulette wheel.
-        bet_color(color: str, amount: int) -> None: Places a bet on a color on the roulette wheel.
-        get_balance() -> int: Returns the player's current balance.
-        add_to_balance(prize: int) -> None: Adds the prize to the player's balance.
-        calculate_number_prize(num: int, result: int, amount: int) -> int: Calculates the prize
-                                                                           for a bet on a number.
-        calculate_color_prize(color: str, result: int, amount: int) -> int: Calculates the prize
-                                                                            for a bet on a color.
+        __init__(self, players_data_manager: PlayersDataManager = PlayersDataManagerFileBased):
+            Initializes a new RouletteGame instance.
+
+        __load_players_data(self) -> dict[str:int]:
+            Loads players data using data manager and returns them as a dictionary.
+
+        __save_players_data(self):
+            Saves players data using data manager.
+
+        add_players(self, players: list[str]):
+            Adds new players to the game.
+
+        spin_the_wheel(self):
+            Simulates a spin of the roulette wheel and returns the winning number.
+
+        has_sufficient_funds(self, player_id: str, amount: int) -> bool:
+            Checks if the player has sufficient funds to place a bet.
+
+        place_bet(self, bet):
+            Places a bet for a player.
+
+        get_color(self, num: int) -> str:
+            Returns the color of a given number.
+
+        add_to_balance(self, player_id: str, amount: int) -> None:
+            Adds an amount to a player's balance.
+
+        subtract_from_balance(self, player_id: str, amount: int) -> None:
+            Subtracts an amount from a player's balance.
+
+        get_player_balance(self, player_id: str):
+            Returns the balance of a given player.
+
+        calculate_number_prize(self, num: int, winning_number: int, amount: int) -> int:
+            Calculates the prize for a winning number bet.
+
+        calculate_color_prize(self, color: str, winning_number: int, amount: int) -> int:
+            Calculates the prize for a winning color bet.
+
+        calculate_prize(self, bet, winning_number):
+            Calculates the prize for a given bet.
+
+        calculate_results(self, winning_number: int):
+            Calculates the results of the game and returns the statistics for each player.
     """
 
     MINIMAL_BET: int = 1
@@ -56,16 +81,15 @@ class RouletteGame:
     # fmt: on
     GREEN_NUMBERS: Tuple[int, ...] = (0,)
 
-    def __init__(self, player_id: int, players_data_manager: PlayersDataManager = PlayersDataManagerFileBased):
+    def __init__(self, players_data_manager: PlayersDataManager = PlayersDataManagerFileBased) -> None:
         """
-        Initializes a new instance of the RouletteGame class.
+        Initialize a new RouletteGame instance.
 
         Args:
-            player_id (int): The ID of the player playing the game.
-            players_data_manager (PlayersDataManager, optional): The data manager used to load and save players data.
-                Defaults to PlayersDataManagerFileBased.
+            players_data_manager (PlayersDataManager, optional): An instance of a class implementing PlayersDataManager
+                interface that will be used to load and save players data. Defaults to PlayersDataManagerFileBased.
         """
-        self.__current_player_id = str(player_id)
+        self.bets = []
         self.__players_data_manager = players_data_manager()
         self.__players_data = self.__load_players_data()
 
@@ -76,28 +100,98 @@ class RouletteGame:
         Returns:
             dict[str, int]: A dictionary containing players data.
         """
-        if players_data := self.__players_data_manager.load_players_data():
-            return players_data
-        return {self.__current_player_id: self.STARTING_BALANCE}
+        return self.__players_data_manager.load_players_data()
 
-    def __save_players_data(self):
+    def __save_players_data(self) -> None:
         """
         Saves players data using data manager.
+
+        Returns:
+            None
         """
         self.__players_data_manager.save_players_data(players=self.__players_data)
 
-    def get_color(self, num: int) -> str:
+    def add_players(self, players_ids: list[str]) -> None:
         """
-        Returns the color of the number on the roulette wheel.
+        Adds new players to the game.
 
         Args:
-            num (int): The number to check the color of.
+            players_ids (list[str]): A list of player IDs to be added.
 
         Returns:
-            str: The color of the number (red, black or green).
+            None
+        """
+        for player_id in players_ids:
+            if player_id not in self.__players_data:
+                self.__players_data[player_id] = 100
+        self.__save_players_data()
+
+    def spin_the_wheel(self) -> int:
+        """Simulates a spin of a roulette wheel and returns the result as an integer from 0 to 36.
+
+        Returns:
+            int: The result of the spin.
+
+        """
+        return random.randint(0, 36)
+
+    def has_sufficient_funds(self, player_id: str, amount: int) -> bool:
+        """Checks whether a player has sufficient funds to make a bet.
+
+        Args:
+            player_id (str): The unique identifier of the player.
+            amount (int): The amount of the bet.
+
+        Returns:
+            bool: True if the player has sufficient funds, False otherwise.
+        """
+        return (self.get_player_balance(player_id) - amount) >= 0
+
+    def place_bet(self, bet: Bet) -> None:
+        """Places a bet on the roulette table.
+
+        This function takes a Bet object as an argument and adds it to the list of bets on the table.
+        The function also checks that the color of the bet is valid and that the amount of the bet is greater than zero.
+        If the color of the bet is not valid, a WrongColorError is raised.
+        If the bet amount is less than or equal to zero, a MinimalBetError is raised.
+        If the player does not have sufficient funds, an InsufficientFundsError is raised.
+
+        Args:
+            bet (models.Bet): The bet to be placed on the table.
 
         Raises:
-            WrongNumberError: If the given number is not on the roulette wheel.
+            WrongColorError: If the color of the bet is not valid.
+            MinimalBetError: If the bet amount is less than or equal to zero.
+            InsufficientFundsError: If the player does not have sufficient funds.
+
+        Returns:
+            None.
+        """
+        color = self.get_color(bet.number) if bet.number else bet.color
+
+        if color.lower() not in self.COLORS:
+            raise WrongColorError(color, self.COLORS)
+        if bet.amount <= 0:
+            raise MinimalBetError(self.MINIMAL_BET)
+
+        self.subtract_from_balance(bet.player.id, bet.amount)
+        self.bets.append(bet)
+
+    def get_color(self, num: int) -> str:
+        """Returns the color of a number on the roulette table.
+
+        This function takes an integer argument and returns the color of the corresponding number on the roulette table.
+        The function checks whether the number is a red, black, or green number and returns the corresponding color.
+        If the number is not valid, a WrongNumberError is raised.
+
+        Args:
+            num (int): The number to get the color of.
+
+        Raises:
+            WrongNumberError: If the number is not valid.
+
+        Returns:
+            str: The color of the number (either 'red', 'black', or 'green').
         """
         if num in self.RED_NUMBERS:
             return "red"
@@ -107,112 +201,150 @@ class RouletteGame:
             return "green"
         raise WrongNumberError(num)
 
-    def spin_the_wheel(self) -> int:
-        """
-        Spins the roulette wheel and returns the result.
+    def add_to_balance(self, player_id: str, amount: int) -> None:
+        """Adds the specified amount to a player's balance.
+
+        This function takes a player ID and an integer amount as arguments,
+        and adds the specified amount to the player's balance.
+
+        The updated balance is then saved to the players data file.
+
+        Args:
+            player_id (str): The ID of the player whose balance will be updated.
+            amount (int): The amount to add to the player's balance.
 
         Returns:
-            int: The number on which the roulette ball lands.
         """
-        return random.randint(0, 36)
+        player_balance = self.get_player_balance(player_id)
+        self.__players_data[player_id] = player_balance + amount
+        self.__save_players_data()
 
-    def has_sufficient_funds(self, amount: int) -> bool:
-        """
-        Checks whether the player has sufficient funds for a bet.
+    def subtract_from_balance(self, player_id: str, amount: int) -> None:
+        """Subtracts the specified amount from a player's balance.
+
+        This function takes a player ID and an integer amount as arguments,
+        and subtracts the specified amount from the player's balance.
+
+        The function first checks whether the player has sufficient funds to cover the bet,
+        and raises an InsufficientBalanceError if the balance is not sufficient.
+
+        The updated balance is then saved to the players data file.
 
         Args:
-            amount (int): The amount of coins the player wants to bet.
-
-        Returns:
-            bool: True if the player has sufficient funds, False otherwise.
-        """
-        return (self.get_balance() - amount) >= 0
-
-    def bet_number(self, num: int, amount: int) -> None:
-        """
-        Places a bet on a specific number.
-
-        Args:
-            num (int): The number to bet on.
-            amount (int): The amount of coins to bet.
+            player_id (str): The ID of the player whose balance will be updated.
+            amount (int): The amount to subtract from the player's balance.
 
         Raises:
-            WrongNumberError: If the given number is not on the roulette wheel.
-            MinimalBetError: If the given amount is less than the minimum bet amount.
-            InsufficientBalanceError: If the player does not have sufficient funds to make the bet.
-        """
-        color = self.get_color(num)
-        self.bet_color(color, amount)
-
-    def bet_color(self, color: str, amount: int) -> None:
-        """Place a bet on a specific color.
-
-        Args:
-            color (str): The color to bet on ('red', 'black', or 'green').
-            amount (int): The amount of money to bet.
-
-        Raises:
-            WrongColorError: If the provided color is not on the roulette wheel.
-            MinimalBetError: If the provided amount is less than or equal to 0.
-            InsufficientBalanceError: If the player's balance is less than the provided amount.
+            InsufficientBalanceError: If the player's balance is not sufficient to cover the bet.
 
         Returns:
             None
         """
-        if color.lower() not in self.COLORS:
-            raise WrongColorError(color, self.COLORS)
-        if amount <= 0:
-            raise MinimalBetError(self.MINIMAL_BET)
-        if not self.has_sufficient_funds(amount):
-            raise InsufficientBalanceError(self.get_balance(), amount)
-
-        self.__players_data[self.__current_player_id] -= amount
+        if not self.has_sufficient_funds(player_id, amount):
+            raise InsufficientBalanceError(self.get_player_balance(player_id), amount)
+        self.__players_data[player_id] -= amount
         self.__save_players_data()
 
-    def get_balance(self) -> int:
-        """Get the current balance of the player.
+    def get_player_balance(self, player_id: str) -> int:
+        """Retrieves the current balance of a player.
+
+        This function takes a player ID as an argument and returns the current balance of the player.
+        If the player is not found in the players data file, the function returns 0.
+
+        Args:
+            player_id (str): The ID of the player whose balance will be retrieved.
 
         Returns:
             int: The current balance of the player.
         """
-        return self.__players_data[self.__current_player_id]
+        return self.__players_data.get(player_id, 0)
 
-    def add_to_balance(self, prize: int) -> None:
-        """Add the prize to the player's balance.
+    def calculate_number_prize(self, num: int, winning_number: int, amount: int) -> int:
+        """Calculates the prize amount for a number bet.
 
-        Args:
-            prize (int): The amount of money won by the player.
+        This function takes a number bet, the winning number, and the bet amount as arguments,
+        and calculates the prize amount for the bet.
 
-        Returns:
-            None
-        """
-        self.__players_data[self.__current_player_id] += prize
-        self.__save_players_data()
+        If the number bet matches the winning number,
+        the function returns the bet amount multiplied by the number prize multiplier.
 
-    def calculate_number_prize(self, num: int, result: int, amount: int) -> int:
-        """
-        Calculate the prize amount for a number bet based on the result of the spin.
+        Otherwise, the function returns 0.
 
         Args:
             num (int): The number that was bet on.
-            result (int): The result of the spin.
-            amount (int): The amount that was bet.
+            winning_number (int): The winning number.
+            amount (int): The bet amount.
 
         Returns:
-            int: The prize amount for the bet.
+            int: The prize amount for the number bet.
         """
-        return amount * self.NUMBER_PRIZE_MULTIPLIER if num == result else 0
+        return amount * self.NUMBER_PRIZE_MULTIPLIER if num == winning_number else 0
 
-    def calculate_color_prize(self, color: str, result: int, amount: int) -> int:
-        """
-        Calculate the prize amount for a color bet based on the result of the spin.
+    def calculate_color_prize(self, color: str, winning_number: int, amount: int) -> int:
+        """Calculates the prize amount for a color bet.
+
+        This function takes a color bet, the winning number, and the bet amount as arguments,
+        and calculates the prize amount for the bet.
+
+        If the color bet matches the color of the winning number,
+        the function returns the bet amount multiplied by the color prize multiplier.
+
+        Otherwise, the function returns 0.
 
         Args:
-            color (str): The color that was bet on.
-            result (int): The result of the spin.
-            amount (int): The amount that was bet.
+            color (str): The color that was bet on ('red', 'black', or None for green).
+            winning_number (int): The winning number.
+            amount (int): The bet amount.
+
+        Returns:
+            int: The prize amount for the color bet.
+        """
+        return amount * self.COLOR_PRIZE_MULTIPLIER if color and color.lower() == self.get_color(winning_number) else 0
+
+    def calculate_prize(self, bet: Bet, winning_number: int) -> int:
+        """Calculates the prize amount for a given bet and winning number.
+
+        This function takes a Bet object and the winning number as arguments, and calculates the prize amount for it.
+        If Bet object contains a number bet, the function calculates the prize amount using the number prize multiplier.
+        If Bet object contains a color bet, the function calculates the prize amount using the color prize multiplier.
+        The function returns the prize amount.
+
+        Args:
+            bet (Bet): A Bet object representing the bet.
+            winning_number (int): The winning number.
 
         Returns:
             int: The prize amount for the bet.
         """
-        return amount * self.COLOR_PRIZE_MULTIPLIER if color.lower() == self.get_color(result) else 0
+        if bet.number:
+            return self.calculate_number_prize(bet.number, winning_number, bet.amount)
+        return self.calculate_color_prize(bet.color, winning_number, bet.amount)
+
+    def calculate_results(self, winning_number: int) -> list:
+        """Calculates and returns the results of the game.
+
+        This function takes the winning number as an argument
+        and calculates the results of the game based on the bets placed.
+
+        It iterates through the list of bets placed and calculates the prize amount for each bet
+        using the calculate_prize function.
+
+        It then adds the prize amount to the player's balance using the add_to_balance function,
+        and adds the result to the PlayersStats object.
+
+        The function returns a list of PlayerBetResult objects, containing the results of the game for each player.
+
+        Args:
+            winning_number (int): The winning number.
+
+        Returns:
+            list: A list of PlayerBetResult objects, containing the results of the game for each player.
+        """
+        players_stats = PlayersStats()
+        while self.bets:
+            bet = self.bets.pop()
+            prize = self.calculate_prize(bet, winning_number)
+            self.add_to_balance(bet.player.id, prize)
+            balance = self.get_player_balance(bet.player.id)
+            players_stats.add_result(PlayerBetResult(bet.player, prize, balance))
+        return players_stats.get_results()

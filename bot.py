@@ -1,16 +1,19 @@
+import asyncio
 import os
 
 import discord
 from discord.ext import commands
 
-from exceptions import WrongNumberError, InsufficientBalanceError, MinimalBetError, WrongColorError
+from exceptions import InsufficientBalanceError, WrongNumberError, MinimalBetError, WrongColorError
 from roulette import RouletteGame
+from models import Player, Bet
 
 TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 
-intents = discord.Intents(messages=True, message_content=True, guilds=True, guild_messages=True)
+intents = discord.Intents(messages=True, message_content=True, guilds=True, guild_messages=True, members=True)
 bot = commands.Bot(command_prefix='$', intents=intents)
 
+ROULETTE_SPIN_FREQUENCY_IN_SECONDS = 120
 SPECIFY_COLOR_PARAMETERS_MSG = "Please indicate both the color and the amount: $color [color] [amount]"
 SPECIFY_NUMBER_PARAMETERS_MSG = "Please indicate both the number and the amount: $number [number] [amount]"
 SPIN_THE_WHEEL_MSG = "Spinning the wheel..."
@@ -20,113 +23,68 @@ SORRY_MSG = "Sorry, you lost the bet."
 BALANCE_MSG = "{}'s balance is {} coins."
 
 
+roulette_game = RouletteGame()
+
+
 @bot.command(name="balance", help="Check your balance in the game")
 async def balance(ctx):
     """
     Retrieves the current balance of the player in the roulette game.
-
     Args:
     - ctx (discord.ext.commands.Context): The invocation context of the command.
-
-    Returns:
-    - None
-
-    Raises:
-    - None
     """
-    roulette = RouletteGame(ctx.author.id)
-    await ctx.send(BALANCE_MSG.format(ctx.author.name, roulette.get_balance()))
+    await ctx.send(BALANCE_MSG.format(ctx.author.name, roulette_game.get_player_balance(str(ctx.author.id))))
 
 
 @bot.command(name="number", help="Bet on a number in roulette")
 async def bet_number_command(ctx, bet_number: int = None, bet_amount: int = None):
-    """
-    Allows the user to bet on a number in roulette.
+    """Place a bet on a number in the roulette game.
 
     Parameters:
-    - ctx (discord.ext.commands.Context): The context object representing the invocation of the command.
-    - bet_number (int, optional): The number the user wants to bet on. Defaults to None.
-    - bet_amount (int, optional): The amount of coins the user wants to bet. Defaults to None.
-
-    Returns:
-    - None: The function does not return anything,
-            but sends messages to the channel to inform the user of the outcome of the bet.
+    -----------
+    ctx: Context
+        The Discord context object.
+    bet_number: int
+        The number to bet on.
+    bet_amount: int
+        The amount of the bet.
     """
-
     if not bet_number or not bet_amount:
         await ctx.send(SPECIFY_NUMBER_PARAMETERS_MSG)
         return
 
-    roulette = RouletteGame(ctx.author.id)
-
     try:
-        roulette.bet_number(bet_number, bet_amount)
-        result = roulette.spin_the_wheel()
+        player = Player(str(ctx.author.id), ctx.author.name, ctx.channel.id)
+        bet = Bet(player, None, bet_number, bet_amount)
+        roulette_game.place_bet(bet)
 
-        await ctx.send(SPIN_THE_WHEEL_MSG)
-        await ctx.send(SPIN_RESULT_MSG.format(result, roulette.get_color(result)))
-
-        prize = roulette.calculate_number_prize(bet_number, result, bet_amount)
-
-        if prize > 0:
-            roulette.add_to_balance(prize)
-            await ctx.send(CONGRATS_MSG.format(prize))
-        else:
-            await ctx.send(SORRY_MSG)
-
-        await ctx.send(BALANCE_MSG.format(ctx.author.name, roulette.get_balance()))
-
-    except InsufficientBalanceError as e:
-        await ctx.send(e)
-    except WrongNumberError as e:
-        await ctx.send(e)
-    except MinimalBetError as e:
+    except (InsufficientBalanceError, WrongNumberError, MinimalBetError) as e:
         await ctx.send(e)
 
 
 @bot.command(name="color", help="Bet on a color in roulette")
 async def bet_color_command(ctx, bet_color: str = None, bet_amount: int = None):
-    """
-    Allows the user to bet on a color in roulette.
+    """Command to allow a player to bet on a color in roulette.
 
     Parameters:
-    - ctx (discord.ext.commands.Context): The context object representing the invocation of the command.
-    - bet_color (str, optional): The color the user wants to bet on (either 'red' or 'black'). Defaults to None.
-    - bet_amount (int, optional): The amount of coins the user wants to bet. Defaults to None.
-
-    Returns:
-    - None: The function does not return anything,
-            but sends messages to the channel to inform the user of the outcome of the bet.
+    -----------
+    ctx: Context
+        The Discord context object.
+    bet_color: str
+        The color that the player wants to bet on.
+    bet_amount: int
+        The amount of the bet.
     """
-
     if not bet_color or not bet_amount:
         await ctx.send(SPECIFY_COLOR_PARAMETERS_MSG)
         return
 
-    roulette = RouletteGame(ctx.author.id)
-
     try:
-        roulette.bet_color(bet_color, bet_amount)
-        result = roulette.spin_the_wheel()
+        player = Player(str(ctx.author.id), ctx.author.name, ctx.channel.id)
+        bet = Bet(player, bet_color, None, bet_amount)
+        roulette_game.place_bet(bet)
 
-        await ctx.send(SPIN_THE_WHEEL_MSG)
-        await ctx.send(SPIN_RESULT_MSG.format(result, roulette.get_color(result)))
-
-        prize = roulette.calculate_color_prize(bet_color, result, bet_amount)
-
-        if prize > 0:
-            roulette.add_to_balance(prize)
-            await ctx.send(CONGRATS_MSG.format(prize))
-        else:
-            await ctx.send(SORRY_MSG)
-
-        await ctx.send(BALANCE_MSG.format(ctx.author.name, roulette.get_balance()))
-
-    except InsufficientBalanceError as e:
-        await ctx.send(e)
-    except WrongColorError as e:
-        await ctx.send(e)
-    except MinimalBetError as e:
+    except (InsufficientBalanceError, WrongColorError, MinimalBetError) as e:
         await ctx.send(e)
 
 
@@ -160,14 +118,11 @@ bot.remove_command('help')
 async def help_command(ctx, command: str = None):
     """
     Provides help for a specific command, or a list of available commands if no command is specified.
-
     Args:
     - ctx (discord.ext.commands.Context): The context object representing the invocation of the command.
     - command (str, optional): The name of the command to provide help for. Defaults to None.
-
     Returns:
     - None: The function does not return anything, but sends messages to the channel to provide help.
-
     Raises:
     - None
     """
@@ -196,6 +151,51 @@ async def help_command(ctx, command: str = None):
     embed.add_field(name="Usage", value=usage_text, inline=False)
 
     await ctx.send(embed=embed)
+
+
+@bot.event
+async def on_ready():
+    """
+    A coroutine function that is called when the bot is ready to start receiving events.
+
+    This function adds all the users in the server to the game and starts the game loop in a separate task.
+
+    Returns:
+        None
+    """
+    players = [str(player.id) for player in bot.users]
+    roulette_game.add_players(players)
+    asyncio.create_task(game_loop())
+
+
+@bot.event
+async def on_member_join(member):
+    """
+    A function that is triggered when a new member joins a server.
+
+    Parameters:
+    member (discord.Member): The member who joined the server.
+
+    """
+    players = [str(member.id)]
+    roulette_game.add_players(players)
+
+
+async def game_loop():
+    """
+    Coroutine that runs indefinitely, periodically spinning the roulette wheel and sending the results to the players.
+    """
+    while True:
+        await asyncio.sleep(ROULETTE_SPIN_FREQUENCY_IN_SECONDS)
+
+        winning_number = roulette_game.spin_the_wheel()
+        results = roulette_game.calculate_results(winning_number)
+
+        for result in results:
+            channel = bot.get_channel(result.player.channel_id)
+            await channel.send(SPIN_THE_WHEEL_MSG)
+            await channel.send(f"{winning_number} {roulette_game.get_color(winning_number)}")
+            await channel.send(result)
 
 
 bot.run(TOKEN)

@@ -24,6 +24,9 @@ $ python bot.py
 ```
 
 ### Rules
+Each roulette spin happens every 2 minutes if there are any bets placed. 
+Winnings are distributed to all players after the spin is made.
+Players can bet on multiple numbers every spin
 1. Initially, every user has **100** coins
 2. For correctly guessed colour, winnings are **2** times the sum they bet
 3. For correctly guessed number, winnings are **36** times the sum they bet
